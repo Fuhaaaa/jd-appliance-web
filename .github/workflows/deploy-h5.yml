@@ -28,18 +28,18 @@ jobs:
       - name: Prepare deploy package
         run: |
           # 创建部署目录
-          mkdir -p deploy
+          mkdir -p deploy/public
 
-          # 复制 H5 构建产物
-          cp -r dist/h5/* deploy/
+          # 复制 H5 构建产物到 public 目录
+          cp -r dist/h5/* deploy/public/
 
-          # 复制 FC 入口文件
+          # 复制 FC 入口文件到根目录
           cp fc-entry/index.js deploy/
           cp fc-entry/package.json deploy/
 
           # 查看部署目录结构
-          echo "=== Deploy package ==="
-          find deploy -type f | head -20
+          echo "=== Deploy package structure ==="
+          find deploy -type f | head -30
           echo "..."
           echo "Total files: $(find deploy -type f | wc -l)"
 
@@ -70,7 +70,7 @@ jobs:
 
       - name: Deploy with Serverless Devs
         run: |
-          s deploy -y --debug 2>&1 | grep -E "skip upload|Uploading|codeChecksum|code zip"
+          s deploy -y
           echo "✅ Deploy completed!"
 
       - name: Clean up

@@ -9,8 +9,8 @@ const https = require('https');
 // 配置：后端 FC 内网地址
 const API_BACKEND = process.env.API_BACKEND || 'https://applican-applian-service-uzjmdtpnxs.cn-shenzhen-vpc.fcapp.run';
 
-// 静态文件目录
-const STATIC_DIR = __dirname;
+// 静态文件目录（H5 构建产物放在 public 子目录）
+const STATIC_DIR = path.join(__dirname, 'public');
 
 // MIME 类型映射
 const MIME_TYPES = {

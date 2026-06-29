@@ -45,7 +45,7 @@ jobs:
 
       - name: Package with adm-zip
         run: |
-          npm install adm-zip
+          npm install adm-zip --legacy-peer-deps --no-save
           node -e "
             const AdmZip = require('adm-zip');
             const zip = new AdmZip();

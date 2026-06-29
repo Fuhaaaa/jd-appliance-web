@@ -73,7 +73,9 @@ jobs:
           cat s.yaml
           echo ""
           echo "=== code.zip info ==="
+          ls -la code.zip
           unzip -l code.zip
           echo ""
           echo "=== Starting deploy ==="
-          s deploy -y --debug
+          # 显式指定配置文件
+          s deploy -y --debug --config ./s.yaml

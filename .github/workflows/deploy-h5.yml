@@ -40,6 +40,9 @@ jobs:
           # 查看部署目录结构
           echo "=== Deploy package ==="
           find deploy -type f
+          echo ""
+          echo "=== index.js content (first 20 lines) ==="
+          head -20 deploy/index.js
 
       - name: Package with adm-zip
         run: |
@@ -65,4 +68,12 @@ jobs:
             -a default
 
       - name: Deploy to FC
-        run: s deploy -y
+        run: |
+          echo "=== s.yaml content ==="
+          cat s.yaml
+          echo ""
+          echo "=== code.zip info ==="
+          unzip -l code.zip
+          echo ""
+          echo "=== Starting deploy ==="
+          s deploy -y --debug

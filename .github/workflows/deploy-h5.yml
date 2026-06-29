@@ -37,9 +37,12 @@ jobs:
           cp fc-entry/index.js deploy/
           cp fc-entry/package.json deploy/
 
+          # 安装 FC 依赖
+          cd deploy && npm install --omit=dev && cd ..
+
           # 查看部署目录结构
           echo "=== Deploy package ==="
-          find deploy -type f
+          find deploy -type f | head -30
           echo ""
           echo "=== index.js content (first 20 lines) ==="
           head -20 deploy/index.js

@@ -1,10 +1,17 @@
 // FC 3.0 HTTP 触发器入口
-// 功能：serve 静态文件 + 反向代理 /api 请求到后端 FC
+// 使用 Hono 框架处理 HTTP 请求
 
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
-const https = require('https');
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { serve } from '@hono/node-server';
+import fs from 'fs';
+import path from 'path';
+import http from 'http';
+import https from 'https';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // 配置：后端 FC 内网地址
 const API_BACKEND = process.env.API_BACKEND || 'https://applican-applian-service-uzjmdtpnxs.cn-shenzhen-vpc.fcapp.run';
@@ -35,61 +42,58 @@ function getContentType(filePath) {
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
-// 代理请求到后端 FC
-function proxyRequest(event) {
+// 创建 Hono 应用
+const app = new Hono();
+
+// 全局 CORS 跨域
+app.use('*', cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization']
+}));
+
+// API 请求代理到后端 FC
+app.all('/api/*', async (c) => {
+  const url = new URL(c.req.url);
+  const targetUrl = new URL(url.pathname + url.search, API_BACKEND);
+
+  const options = {
+    hostname: targetUrl.hostname,
+    port: targetUrl.port || 443,
+    path: targetUrl.pathname + targetUrl.search,
+    method: c.req.method,
+    headers: {
+      ...Object.fromEntries(c.req.raw.headers.entries()),
+      host: targetUrl.host,
+    },
+  };
+
+  const client = targetUrl.protocol === 'https:' ? https : http;
+
   return new Promise((resolve, reject) => {
-    // 构建查询字符串
-    let queryString = '';
-    if (event.queries && Object.keys(event.queries).length > 0) {
-      queryString = '?' + new URLSearchParams(event.queries).toString();
-    }
-
-    const targetUrl = new URL(event.path + queryString, API_BACKEND);
-
-    const options = {
-      hostname: targetUrl.hostname,
-      port: targetUrl.port || 443,
-      path: targetUrl.pathname + targetUrl.search,
-      method: event.method || 'GET',
-      headers: {
-        ...event.headers,
-        host: targetUrl.host,
-      },
-    };
-
-    const client = targetUrl.protocol === 'https:' ? https : http;
-
     const proxyReq = client.request(options, (proxyRes) => {
       let body = '';
       proxyRes.on('data', (chunk) => { body += chunk; });
       proxyRes.on('end', () => {
-        resolve({
-          statusCode: proxyRes.statusCode,
-          headers: proxyRes.headers,
-          body: body,
-        });
+        resolve(c.text(body, proxyRes.statusCode));
       });
     });
 
     proxyReq.on('error', (err) => {
       console.error('Proxy error:', err);
-      resolve({
-        statusCode: 502,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: 502, message: 'Backend unavailable' }),
-      });
+      resolve(c.json({ code: 502, message: 'Backend unavailable' }, 502));
     });
 
-    if (event.body) {
-      proxyReq.write(event.body);
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
+      proxyReq.write(c.req.body);
     }
     proxyReq.end();
   });
-}
+});
 
-// Serve 静态文件
-function serveStatic(event) {
-  let reqPath = event.path || '/';
+// 静态文件服务
+app.get('*', (c) => {
+  let reqPath = c.req.path;
 
   // 默认文件
   if (reqPath === '/') {
@@ -103,11 +107,7 @@ function serveStatic(event) {
 
   // 安全检查
   if (!filePath.startsWith(STATIC_DIR)) {
-    return {
-      statusCode: 403,
-      headers: { 'Content-Type': 'text/plain' },
-      body: 'Forbidden',
-    };
+    return c.text('Forbidden', 403);
   }
 
   // 如果是目录，找 index.html
@@ -128,37 +128,24 @@ function serveStatic(event) {
     const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.woff', '.woff2', '.ttf'];
     const isBinary = binaryExtensions.includes(path.extname(filePath).toLowerCase());
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': contentType },
-      body: isBinary ? content.toString('base64') : content.toString('utf-8'),
-      isBase64Encoded: isBinary,
-    };
+    if (isBinary) {
+      return c.body(content, 200, { 'Content-Type': contentType });
+    }
+
+    return c.text(content.toString('utf-8'), 200, { 'Content-Type': contentType });
   } catch (err) {
     console.error('Serve static error:', err);
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'text/plain' },
-      body: 'Internal Server Error',
-    };
+    return c.text('Internal Server Error', 500);
   }
-}
+});
 
-// FC 3.0 HTTP 触发器入口
-exports.handler = async (event, context) => {
-  console.log('=== Function handler called ===');
-  console.log('Event:', JSON.stringify(event, null, 2));
-  console.log('Request:', event.method, event.path);
+// 启动服务器
+const port = 3000;
+const host = '0.0.0.0';
+console.log(`🚀 服务启动在 http://${host}:${port}`);
 
-  // API 请求代理到后端 FC
-  if (event.path && event.path.startsWith('/api')) {
-    console.log('Proxying to backend...');
-    return await proxyRequest(event);
-  }
-
-  // 其他请求 serve 静态文件
-  console.log('Serving static file...');
-  const result = serveStatic(event);
-  console.log('Result:', JSON.stringify(result, null, 2));
-  return result;
-};
+serve({
+  fetch: app.fetch,
+  port,
+  hostname: host
+});

@@ -1,16 +1,16 @@
-// FC Web 函数入口
-// 功能：serve 静态文件 + 反向代理 /api 请求到 ECS 后端
+// FC 3.0 HTTP 触发器入口
+// 功能：serve 静态文件 + 反向代理 /api 请求到后端 FC
 
-const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const https = require('https');
 
 // 配置：后端 FC 内网地址
-// 前端 FC 和后端 FC 需要在同一个 VPC
 const API_BACKEND = process.env.API_BACKEND || 'https://applican-applian-service-uzjmdtpnxs.cn-shenzhen-vpc.fcapp.run';
 
-// 静态文件目录（H5 构建产物）
-const STATIC_DIR = path.join(__dirname, 'public');
+// 静态文件目录
+const STATIC_DIR = __dirname;
 
 // MIME 类型映射
 const MIME_TYPES = {
@@ -35,55 +35,81 @@ function getContentType(filePath) {
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
-// 代理请求到 ECS 后端
-function proxyRequest(req, res) {
-  const targetUrl = new URL(req.url, API_BACKEND);
+// 代理请求到后端 FC
+function proxyRequest(event) {
+  return new Promise((resolve, reject) => {
+    const targetUrl = new URL(event.path + (event.queryString ? '?' + new URLSearchParams(event.queryString).toString() : ''), API_BACKEND);
 
-  const options = {
-    hostname: targetUrl.hostname,
-    port: targetUrl.port,
-    path: targetUrl.pathname + targetUrl.search,
-    method: req.method,
-    headers: {
-      ...req.headers,
-      host: targetUrl.host,
-    },
-  };
+    const options = {
+      hostname: targetUrl.hostname,
+      port: targetUrl.port || 443,
+      path: targetUrl.pathname + targetUrl.search,
+      method: event.httpMethod,
+      headers: {
+        ...event.headers,
+        host: targetUrl.host,
+      },
+    };
 
-  const proxyReq = http.request(options, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
-    proxyRes.pipe(res);
+    const client = targetUrl.protocol === 'https:' ? https : http;
+
+    const proxyReq = client.request(options, (proxyRes) => {
+      let body = '';
+      proxyRes.on('data', (chunk) => { body += chunk; });
+      proxyRes.on('end', () => {
+        resolve({
+          statusCode: proxyRes.statusCode,
+          headers: proxyRes.headers,
+          body: body,
+        });
+      });
+    });
+
+    proxyReq.on('error', (err) => {
+      console.error('Proxy error:', err);
+      resolve({
+        statusCode: 502,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 502, message: 'Backend unavailable' }),
+      });
+    });
+
+    if (event.body) {
+      proxyReq.write(event.body);
+    }
+    proxyReq.end();
   });
-
-  proxyReq.on('error', (err) => {
-    console.error('Proxy error:', err);
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ code: 502, message: 'Backend unavailable' }));
-  });
-
-  req.pipe(proxyReq);
 }
 
 // Serve 静态文件
-function serveStatic(req, res) {
-  let filePath = path.join(STATIC_DIR, req.url === '/' ? 'index.html' : req.url);
+function serveStatic(event) {
+  let reqPath = event.path || '/';
 
-  // 去掉查询参数
-  filePath = filePath.split('?')[0];
-
-  // 安全检查：防止目录遍历
-  if (!filePath.startsWith(STATIC_DIR)) {
-    res.writeHead(403);
-    res.end('Forbidden');
-    return;
+  // 默认文件
+  if (reqPath === '/') {
+    reqPath = '/index.html';
   }
 
-  // 如果是目录，尝试找 index.html
+  // 去掉查询参数
+  reqPath = reqPath.split('?')[0];
+
+  let filePath = path.join(STATIC_DIR, reqPath);
+
+  // 安全检查
+  if (!filePath.startsWith(STATIC_DIR)) {
+    return {
+      statusCode: 403,
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'Forbidden',
+    };
+  }
+
+  // 如果是目录，找 index.html
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
     filePath = path.join(filePath, 'index.html');
   }
 
-  // SPA 路由：如果文件不存在，返回 index.html
+  // SPA 路由：文件不存在返回 index.html
   if (!fs.existsSync(filePath)) {
     filePath = path.join(STATIC_DIR, 'index.html');
   }
@@ -92,33 +118,35 @@ function serveStatic(req, res) {
     const content = fs.readFileSync(filePath);
     const contentType = getContentType(filePath);
 
-    // 设置缓存头（静态资源长期缓存）
-    const headers = { 'Content-Type': contentType };
-    if (filePath.match(/\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf)$/)) {
-      headers['Cache-Control'] = 'public, max-age=31536000, immutable';
-    }
+    // 判断是否是二进制文件
+    const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.woff', '.woff2', '.ttf'];
+    const isBinary = binaryExtensions.includes(path.extname(filePath).toLowerCase());
 
-    res.writeHead(200, headers);
-    res.end(content);
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': contentType },
+      body: isBinary ? content.toString('base64') : content.toString('utf-8'),
+      isBase64Encoded: isBinary,
+    };
   } catch (err) {
     console.error('Serve static error:', err);
-    res.writeHead(500);
-    res.end('Internal Server Error');
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'Internal Server Error',
+    };
   }
 }
 
-// FC Web 函数入口
-exports.initializer = function (context, callback) {
-  callback(null, '');
-};
+// FC 3.0 HTTP 触发器入口
+exports.handler = async (event, context) => {
+  console.log('Request:', event.httpMethod, event.path);
 
-exports.handler = function (req, res, context) {
-  // API 请求代理到 ECS 后端
-  if (req.url.startsWith('/api')) {
-    proxyRequest(req, res);
-    return;
+  // API 请求代理到后端 FC
+  if (event.path && event.path.startsWith('/api')) {
+    return await proxyRequest(event);
   }
 
   // 其他请求 serve 静态文件
-  serveStatic(req, res);
+  return serveStatic(event);
 };

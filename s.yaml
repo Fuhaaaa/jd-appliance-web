@@ -21,3 +21,14 @@ resources:
       code: ./code.zip
       environmentVariables:
         API_BACKEND: 'https://applican-applian-service-uzjmdtpnxs.cn-shenzhen-vpc.fcapp.run'
+      triggers:
+        - triggerName: httpTrigger
+          triggerType: http
+          triggerConfig:
+            authType: anonymous
+            methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS

@@ -9,8 +9,8 @@ const __dirname = path.dirname(__filename);
 // 静态文件目录
 const STATIC_DIR = path.join(__dirname, 'public');
 
-// 后端 FC 内网地址
-const API_BACKEND = process.env.API_BACKEND || 'https://applican-applian-service-uzjmdtpnxs.cn-shenzhen-vpc.fcapp.run';
+// 后端 FC 地址
+const API_BACKEND = process.env.API_BACKEND || 'http://fc.cheapgo.top';
 
 // MIME 类型映射
 const MIME_TYPES = {

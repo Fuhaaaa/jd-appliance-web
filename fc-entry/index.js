@@ -9,6 +9,9 @@ const __dirname = path.dirname(__filename);
 // 静态文件目录
 const STATIC_DIR = path.join(__dirname, 'public');
 
+// 后端 FC 内网地址
+const API_BACKEND = process.env.API_BACKEND || 'https://applican-applian-service-uzjmdtpnxs.cn-shenzhen-vpc.fcapp.run';
+
 // MIME 类型映射
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -28,34 +31,64 @@ function getContentType(filePath) {
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
+// 代理请求到后端 FC
+async function proxyRequest(event) {
+  const reqPath = event.requestURI || '/';
+  const url = `${API_BACKEND}${reqPath}`;
+
+  console.log('Proxying to:', url);
+
+  try {
+    const response = await fetch(url, {
+      method: event.httpMethod || 'GET',
+      headers: event.headers || {},
+      body: event.body || undefined,
+    });
+
+    const data = await response.text();
+    return data;
+  } catch (err) {
+    console.error('Proxy error:', err);
+    return JSON.stringify({ code: 502, message: 'Backend unavailable' });
+  }
+}
+
 export async function handler(event, context) {
   console.log('Request:', event.requestURI);
 
-  let reqPath = event.requestURI || '/';
+  const reqPath = event.requestURI || '/';
+
+  // API 请求代理到后端 FC
+  if (reqPath.startsWith('/api')) {
+    return await proxyRequest(event);
+  }
+
+  // 静态文件请求
+  let filePath = reqPath;
 
   // 默认文件
-  if (reqPath === '/') {
-    reqPath = '/index.html';
+  if (filePath === '/') {
+    filePath = '/index.html';
   }
 
   // 去掉查询参数
-  reqPath = reqPath.split('?')[0];
+  filePath = filePath.split('?')[0];
 
-  let filePath = path.join(STATIC_DIR, reqPath);
+  let fullPath = path.join(STATIC_DIR, filePath);
 
   // 如果是目录，找 index.html
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-    filePath = path.join(filePath, 'index.html');
+  if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
+    fullPath = path.join(fullPath, 'index.html');
   }
 
   // 文件不存在返回 index.html (SPA 路由)
-  if (!fs.existsSync(filePath)) {
-    filePath = path.join(STATIC_DIR, 'index.html');
+  if (!fs.existsSync(fullPath)) {
+    fullPath = path.join(STATIC_DIR, 'index.html');
   }
 
   try {
-    const content = fs.readFileSync(filePath);
-    const contentType = getContentType(filePath);
+    const content = fs.readFileSync(fullPath);
+    const contentType = getContentType(fullPath);
 
     // 用 context 设置响应头
     if (context && context.setHeader) {

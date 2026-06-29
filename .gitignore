@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+fc-deploy/
+fc-entry/public/
+
+# Cache
+.swc/
+
+# Claude & Agents
+.claude/
+.agents/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

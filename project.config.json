@@ -1,0 +1,17 @@
+{
+  "miniprogramRoot": "dist/weapp/",
+  "projectname": "jd-appliance-search",
+  "description": "京东家电搜索小程序",
+  "appid": "touristappid",
+  "setting": {
+    "urlCheck": false,
+    "es6": false,
+    "enhance": false,
+    "compileHotReLoad": false,
+    "postcss": false,
+    "minified": false,
+    "newFeature": true
+  },
+  "compileType": "miniprogram",
+  "condition": {}
+}

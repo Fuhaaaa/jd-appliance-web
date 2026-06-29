@@ -43,28 +43,43 @@ jobs:
           echo "..."
           echo "Total files: $(find fc-deploy -type f | wc -l)"
 
-      - name: Package for FC
-        working-directory: fc-deploy
-        run: zip -r ../fc-deploy-package.zip ./*
+      - name: Package with adm-zip
+        run: |
+          npm install adm-zip
+          node -e "
+            const AdmZip = require('adm-zip');
+            const zip = new AdmZip();
+            zip.addLocalFolder('fc-deploy', '');
+            zip.writeZip('fc-deploy-package.zip');
+            console.log('ZIP created successfully');
+            console.log('Size:', require('fs').statSync('fc-deploy-package.zip').size, 'bytes');
+          "
 
       - name: Setup Alibaba Cloud CLI
         run: |
           curl -fsSL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz | tar xz
           sudo mv aliyun /usr/local/bin/
-          aliyun configure set \
-            --mode AK \
-            --access-key-id ${{ secrets.ALIYUN_ACCESS_KEY_ID }} \
-            --access-key-secret ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }} \
-            --region ${{ secrets.ALIYUN_REGION }}
 
       - name: Deploy to FC 3.0
+        env:
+          ALIYUN_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+          ALIYUN_REGION: ${{ secrets.ALIYUN_REGION }}
+          FC_FUNCTION_NAME: ${{ secrets.FC_FUNCTION_NAME }}
         run: |
-          # FC 3.0 API 更新函数代码
+          # 配置阿里云 CLI
+          aliyun configure set \
+            --mode AK \
+            --access-key-id "$ALIYUN_ACCESS_KEY_ID" \
+            --access-key-secret "$ALIYUN_ACCESS_KEY_SECRET" \
+            --region "$ALIYUN_REGION"
+
+          # 使用文件方式上传（避免参数过长）
           aliyun fc PUT \
-            /functions/${{ secrets.FC_FUNCTION_NAME }}/code \
+            /functions/${FC_FUNCTION_NAME}/code \
             --header "Content-Type=application/zip" \
-            --body "$(base64 -w0 fc-deploy-package.zip)" \
-            --region ${{ secrets.ALIYUN_REGION }}
+            --body-file "fc-deploy-package.zip" \
+            --region "$ALIYUN_REGION"
 
           echo "✅ Deploy completed!"
 

@@ -76,4 +76,5 @@ jobs:
           unzip -l code.zip
           echo ""
           echo "=== Starting deploy ==="
-          s deploy -y --debug
+          # 使用 --skip-push 避免更新触发器
+          s deploy -y --skip-push --debug

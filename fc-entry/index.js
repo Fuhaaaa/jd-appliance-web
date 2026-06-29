@@ -38,13 +38,19 @@ function getContentType(filePath) {
 // 代理请求到后端 FC
 function proxyRequest(event) {
   return new Promise((resolve, reject) => {
-    const targetUrl = new URL(event.path + (event.queryString ? '?' + new URLSearchParams(event.queryString).toString() : ''), API_BACKEND);
+    // 构建查询字符串
+    let queryString = '';
+    if (event.queries && Object.keys(event.queries).length > 0) {
+      queryString = '?' + new URLSearchParams(event.queries).toString();
+    }
+
+    const targetUrl = new URL(event.path + queryString, API_BACKEND);
 
     const options = {
       hostname: targetUrl.hostname,
       port: targetUrl.port || 443,
       path: targetUrl.pathname + targetUrl.search,
-      method: event.httpMethod,
+      method: event.method || 'GET',
       headers: {
         ...event.headers,
         host: targetUrl.host,
@@ -140,7 +146,7 @@ function serveStatic(event) {
 
 // FC 3.0 HTTP 触发器入口
 exports.handler = async (event, context) => {
-  console.log('Request:', event.httpMethod, event.path);
+  console.log('Request:', event.method, event.path);
 
   // API 请求代理到后端 FC
   if (event.path && event.path.startsWith('/api')) {

@@ -1,0 +1,73 @@
+name: Deploy H5 to FC
+
+on:
+  push:
+    branches: [main]
+
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build H5
+        run: npm run build:h5
+
+      - name: Prepare FC deploy package
+        run: |
+          # 创建部署目录结构
+          mkdir -p fc-deploy/public
+
+          # 复制 FC 入口文件
+          cp fc-entry/index.js fc-deploy/
+          cp fc-entry/package.json fc-deploy/
+
+          # 复制 H5 构建产物到 public 目录
+          cp -r dist/h5/* fc-deploy/public/
+
+          # 查看目录结构
+          echo "=== FC deploy package ==="
+          find fc-deploy -type f | head -20
+          echo "..."
+          echo "Total files: $(find fc-deploy -type f | wc -l)"
+
+      - name: Package for FC
+        working-directory: fc-deploy
+        run: zip -r ../fc-deploy-package.zip ./*
+
+      - name: Setup Alibaba Cloud CLI
+        run: |
+          curl -fsSL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz | tar xz
+          sudo mv aliyun /usr/local/bin/
+          aliyun configure set \
+            --mode AK \
+            --access-key-id ${{ secrets.ALIYUN_ACCESS_KEY_ID }} \
+            --access-key-secret ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }} \
+            --region ${{ secrets.ALIYUN_REGION }}
+
+      - name: Deploy to FC 3.0
+        run: |
+          # FC 3.0 API 更新函数代码
+          aliyun fc PUT \
+            /functions/${{ secrets.FC_FUNCTION_NAME }}/code \
+            --header "Content-Type=application/zip" \
+            --body "$(base64 -w0 fc-deploy-package.zip)" \
+            --region ${{ secrets.ALIYUN_REGION }}
+
+          echo "✅ Deploy completed!"
+
+      - name: Clean up
+        if: always()
+        run: rm -rf fc-deploy fc-deploy-package.zip

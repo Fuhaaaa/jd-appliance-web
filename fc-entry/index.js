@@ -27,23 +27,23 @@ function getContentType(filePath) {
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
-// 读取文件并返回 FC 标准响应
+// 关键：必须返回包含 statusCode 的对象
 function serveFile(filePath) {
   try {
     const content = fs.readFileSync(filePath);
     const contentType = getContentType(filePath);
 
-    // 判断是否是二进制文件
     const isBinary = ['.png', '.jpg', '.jpeg', '.gif', '.ico'].some(ext =>
       filePath.toLowerCase().endsWith(ext)
     );
 
+    // ✅ 正确：返回包含 statusCode 的对象
     if (isBinary) {
       return {
         statusCode: 200,
         headers: {
-          'content-type': contentType,
-          'cache-control': 'public, max-age=31536000'
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=31536000'
         },
         body: content.toString('base64'),
         isBase64Encoded: true
@@ -52,8 +52,8 @@ function serveFile(filePath) {
       return {
         statusCode: 200,
         headers: {
-          'content-type': contentType,
-          'cache-control': 'public, max-age=31536000'
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=31536000'
         },
         body: content.toString('utf-8'),
         isBase64Encoded: false
@@ -63,7 +63,9 @@ function serveFile(filePath) {
     console.error('File read error:', err);
     return {
       statusCode: 404,
-      headers: { 'content-type': 'text/plain; charset=utf-8' },
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8'
+      },
       body: 'Not Found',
       isBase64Encoded: false
     };
@@ -86,10 +88,11 @@ async function proxyRequest(event) {
 
     const data = await response.text();
 
+    // ✅ 正确：返回包含 statusCode 的对象
     return {
       statusCode: response.status,
       headers: {
-        'content-type': response.headers.get('content-type') || 'application/json; charset=utf-8'
+        'Content-Type': response.headers.get('content-type') || 'application/json; charset=utf-8'
       },
       body: data,
       isBase64Encoded: false
@@ -98,7 +101,9 @@ async function proxyRequest(event) {
     console.error('Proxy error:', err);
     return {
       statusCode: 502,
-      headers: { 'content-type': 'application/json; charset=utf-8' },
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8'
+      },
       body: JSON.stringify({ code: 502, message: 'Backend unavailable' }),
       isBase64Encoded: false
     };
@@ -135,5 +140,6 @@ export async function handler(event, context) {
     fullPath = path.join(STATIC_DIR, 'index.html');
   }
 
+  // ✅ 必须返回对象，不能返回原始内容
   return serveFile(fullPath);
 }

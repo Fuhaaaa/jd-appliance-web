@@ -6,13 +6,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 静态文件目录
 const STATIC_DIR = path.join(__dirname, 'public');
-
-// 后端 FC 地址
 const API_BACKEND = process.env.API_BACKEND || 'http://fc.cheapgo.top';
 
-// MIME 类型映射
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -31,6 +27,49 @@ function getContentType(filePath) {
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
+// 读取文件并返回 FC 标准响应格式
+function serveFile(filePath) {
+  try {
+    const content = fs.readFileSync(filePath);
+    const contentType = getContentType(filePath);
+
+    // 二进制文件用 base64，文本文件直接转字符串
+    const isBinary = ['.png', '.jpg', '.jpeg', '.gif', '.ico'].some(ext =>
+      filePath.toLowerCase().endsWith(ext)
+    );
+
+    if (isBinary) {
+      return {
+        statusCode: 200,
+        headers: {
+          'content-type': contentType,
+          'cache-control': 'public, max-age=31536000'
+        },
+        body: content.toString('base64'),
+        isBase64Encoded: true
+      };
+    } else {
+      return {
+        statusCode: 200,
+        headers: {
+          'content-type': contentType,
+          'cache-control': 'public, max-age=31536000'
+        },
+        body: content.toString('utf-8'),
+        isBase64Encoded: false
+      };
+    }
+  } catch (err) {
+    console.error('File read error:', err);
+    return {
+      statusCode: 404,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+      body: 'Not Found',
+      isBase64Encoded: false
+    };
+  }
+}
+
 // 代理请求到后端 FC
 async function proxyRequest(event) {
   const reqPath = event.requestURI || '/';
@@ -46,10 +85,23 @@ async function proxyRequest(event) {
     });
 
     const data = await response.text();
-    return data;
+
+    return {
+      statusCode: response.status,
+      headers: {
+        'content-type': response.headers.get('content-type') || 'application/json; charset=utf-8'
+      },
+      body: data,
+      isBase64Encoded: false
+    };
   } catch (err) {
     console.error('Proxy error:', err);
-    return JSON.stringify({ code: 502, message: 'Backend unavailable' });
+    return {
+      statusCode: 502,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ code: 502, message: 'Backend unavailable' }),
+      isBase64Encoded: false
+    };
   }
 }
 
@@ -66,38 +118,21 @@ export async function handler(event, context) {
   // 静态文件请求
   let filePath = reqPath;
 
-  // 默认文件
   if (filePath === '/') {
     filePath = '/index.html';
   }
 
-  // 去掉查询参数
   filePath = filePath.split('?')[0];
 
   let fullPath = path.join(STATIC_DIR, filePath);
 
-  // 如果是目录，找 index.html
   if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
     fullPath = path.join(fullPath, 'index.html');
   }
 
-  // 文件不存在返回 index.html (SPA 路由)
   if (!fs.existsSync(fullPath)) {
     fullPath = path.join(STATIC_DIR, 'index.html');
   }
 
-  try {
-    const content = fs.readFileSync(fullPath);
-    const contentType = getContentType(fullPath);
-
-    // 使用 context 设置响应头
-    context.setHeader('content-type', contentType);
-    context.setHeader('cache-control', 'public, max-age=31536000');
-
-    return content;
-  } catch (err) {
-    console.error('Error:', err);
-    context.setHeader('content-type', 'text/plain');
-    return 'Not Found';
-  }
+  return serveFile(fullPath);
 }

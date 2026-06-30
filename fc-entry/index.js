@@ -27,13 +27,13 @@ function getContentType(filePath) {
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
-// 读取文件并返回 FC 标准响应格式
+// 读取文件并返回 FC 标准响应
 function serveFile(filePath) {
   try {
     const content = fs.readFileSync(filePath);
     const contentType = getContentType(filePath);
 
-    // 二进制文件用 base64，文本文件直接转字符串
+    // 判断是否是二进制文件
     const isBinary = ['.png', '.jpg', '.jpeg', '.gif', '.ico'].some(ext =>
       filePath.toLowerCase().endsWith(ext)
     );
@@ -70,7 +70,7 @@ function serveFile(filePath) {
   }
 }
 
-// 代理请求到后端 FC
+// 代理请求到后端
 async function proxyRequest(event) {
   const reqPath = event.requestURI || '/';
   const url = `${API_BACKEND}${reqPath}`;
@@ -107,10 +107,11 @@ async function proxyRequest(event) {
 
 export async function handler(event, context) {
   console.log('Request:', event.requestURI);
+  console.log('Event:', JSON.stringify(event, null, 2));
 
   const reqPath = event.requestURI || '/';
 
-  // API 请求代理到后端 FC
+  // API 请求代理到后端
   if (reqPath.startsWith('/api')) {
     return await proxyRequest(event);
   }

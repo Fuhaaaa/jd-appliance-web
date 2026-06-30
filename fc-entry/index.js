@@ -27,7 +27,6 @@ function getContentType(filePath) {
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
-// 关键：必须返回包含 statusCode 的对象
 function serveFile(filePath) {
   try {
     const content = fs.readFileSync(filePath);
@@ -37,34 +36,31 @@ function serveFile(filePath) {
       filePath.toLowerCase().endsWith(ext)
     );
 
-    // ✅ 正确：返回包含 statusCode 的对象
+    // ✅ 必须返回包含 statusCode 的对象
+    const response = {
+      statusCode: 200,
+      headers: {
+        'content-type': contentType,
+        'content-disposition': 'inline',  // 关键：覆盖默认 attachment
+        'cache-control': 'public, max-age=31536000'
+      },
+      isBase64Encoded: isBinary
+    };
+
     if (isBinary) {
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=31536000'
-        },
-        body: content.toString('base64'),
-        isBase64Encoded: true
-      };
+      response.body = content.toString('base64');
     } else {
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=31536000'
-        },
-        body: content.toString('utf-8'),
-        isBase64Encoded: false
-      };
+      response.body = content.toString('utf-8');
     }
+
+    return response;
   } catch (err) {
     console.error('File read error:', err);
     return {
       statusCode: 404,
       headers: {
-        'Content-Type': 'text/plain; charset=utf-8'
+        'content-type': 'text/plain; charset=utf-8',
+        'content-disposition': 'inline'
       },
       body: 'Not Found',
       isBase64Encoded: false
@@ -72,7 +68,6 @@ function serveFile(filePath) {
   }
 }
 
-// 代理请求到后端
 async function proxyRequest(event) {
   const reqPath = event.requestURI || '/';
   const url = `${API_BACKEND}${reqPath}`;
@@ -88,11 +83,11 @@ async function proxyRequest(event) {
 
     const data = await response.text();
 
-    // ✅ 正确：返回包含 statusCode 的对象
     return {
       statusCode: response.status,
       headers: {
-        'Content-Type': response.headers.get('content-type') || 'application/json; charset=utf-8'
+        'content-type': response.headers.get('content-type') || 'application/json; charset=utf-8',
+        'content-disposition': 'inline'
       },
       body: data,
       isBase64Encoded: false
@@ -102,7 +97,8 @@ async function proxyRequest(event) {
     return {
       statusCode: 502,
       headers: {
-        'Content-Type': 'application/json; charset=utf-8'
+        'content-type': 'application/json; charset=utf-8',
+        'content-disposition': 'inline'
       },
       body: JSON.stringify({ code: 502, message: 'Backend unavailable' }),
       isBase64Encoded: false
@@ -116,12 +112,10 @@ export async function handler(event, context) {
 
   const reqPath = event.requestURI || '/';
 
-  // API 请求代理到后端
   if (reqPath.startsWith('/api')) {
     return await proxyRequest(event);
   }
 
-  // 静态文件请求
   let filePath = reqPath;
 
   if (filePath === '/') {
@@ -140,6 +134,6 @@ export async function handler(event, context) {
     fullPath = path.join(STATIC_DIR, 'index.html');
   }
 
-  // ✅ 必须返回对象，不能返回原始内容
+  // ✅ 返回对象，不要直接返回字符串
   return serveFile(fullPath);
 }

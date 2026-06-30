@@ -49,15 +49,15 @@ export async function handler(req, resp, context) {
       resp.setStatusCode(response.status);
       resp.setHeader('content-type', response.headers.get('content-type') || 'application/json; charset=utf-8');
       resp.setHeader('content-disposition', 'inline');
-      resp.end(data);  // ✅ 使用 end
+      resp.send(data);
 
     } catch (err) {
       console.error('Proxy error:', err);
       resp.setStatusCode(502);
       resp.setHeader('content-type', 'application/json; charset=utf-8');
-      resp.end(JSON.stringify({ code: 502, message: 'Backend unavailable' }));
+      resp.send(JSON.stringify({ code: 502, message: 'Backend unavailable' }));
     }
-    return;
+    return null;  // ✅ 返回 null
   }
 
   // 静态文件请求
@@ -92,15 +92,17 @@ export async function handler(req, resp, context) {
     resp.setHeader('content-disposition', 'inline');
 
     if (isBinary) {
-      resp.end(content.toString('base64'));
+      resp.send(content.toString('base64'));
     } else {
-      resp.end(content.toString('utf-8'));  // ✅ 使用 end
+      resp.send(content.toString('utf-8'));
     }
 
   } catch (err) {
     console.error('File read error:', err);
     resp.setStatusCode(404);
     resp.setHeader('content-type', 'text/plain; charset=utf-8');
-    resp.end('Not Found');
+    resp.send('Not Found');
   }
+
+  return null;  // ✅ 返回 null
 }

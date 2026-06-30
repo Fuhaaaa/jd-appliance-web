@@ -26,7 +26,6 @@ function getContentType(filePath) {
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
-// ✅ FC 3.0 HTTP 函数格式
 export async function handler(req, resp, context) {
   console.log('Request URL:', req.url);
   console.log('Request path:', req.path);
@@ -50,13 +49,13 @@ export async function handler(req, resp, context) {
       resp.setStatusCode(response.status);
       resp.setHeader('content-type', response.headers.get('content-type') || 'application/json; charset=utf-8');
       resp.setHeader('content-disposition', 'inline');
-      resp.send(data);
+      resp.end(data);  // ✅ 使用 end
 
     } catch (err) {
       console.error('Proxy error:', err);
       resp.setStatusCode(502);
       resp.setHeader('content-type', 'application/json; charset=utf-8');
-      resp.send(JSON.stringify({ code: 502, message: 'Backend unavailable' }));
+      resp.end(JSON.stringify({ code: 502, message: 'Backend unavailable' }));
     }
     return;
   }
@@ -93,15 +92,15 @@ export async function handler(req, resp, context) {
     resp.setHeader('content-disposition', 'inline');
 
     if (isBinary) {
-      resp.send(content.toString('base64'));
+      resp.end(content.toString('base64'));
     } else {
-      resp.send(content.toString('utf-8'));
+      resp.end(content.toString('utf-8'));  // ✅ 使用 end
     }
 
   } catch (err) {
     console.error('File read error:', err);
     resp.setStatusCode(404);
     resp.setHeader('content-type', 'text/plain; charset=utf-8');
-    resp.send('Not Found');
+    resp.end('Not Found');
   }
 }

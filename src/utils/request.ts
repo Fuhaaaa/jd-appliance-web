@@ -13,10 +13,14 @@ const API_PORT = '3000'
 const API_ORIGIN = `http://${API_HOST}:${API_PORT}`
 
 // 根据环境动态设置 BASE_URL
-// H5：走相对路径 `/api`，开发环境由 devServer proxy 代理，生产环境由 FC 入口函数反向代理
+// H5：开发环境走 `/api`（devServer proxy），生产环境直接调用后端
 // 小程序：用开发机局域网地址
 const getBaseUrl = () => {
   if (process.env.TARO_ENV === 'h5') {
+    // 生产环境直接调用后端 API
+    if (process.env.NODE_ENV === 'production') {
+      return 'https://fc.cheapgo.top/api'
+    }
     return '/api'
   }
   return `${API_ORIGIN}/api`

@@ -53,9 +53,15 @@ export async function handler(req, resp, context) {
 
     } catch (err) {
       console.error('Proxy error:', err);
+      console.error('Error details:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
       resp.setStatusCode(502);
       resp.setHeader('content-type', 'application/json; charset=utf-8');
-      resp.send(JSON.stringify({ code: 502, message: 'Backend unavailable' }));
+      resp.send(JSON.stringify({
+        code: 502,
+        message: 'Backend unavailable',
+        error: err.message,
+        url: `${API_BACKEND}${reqPath}`
+      }));
     }
     return null;  // ✅ 返回 null
   }

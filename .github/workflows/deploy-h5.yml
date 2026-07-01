@@ -57,7 +57,7 @@ jobs:
           ALIYUN_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
           ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
         run: |
-          npm install @alicloud/fc2 --no-save
+          npm install @alicloud/fc2 --no-save --legacy-peer-deps
 
           node -e "
           const FC = require('@alicloud/fc2');
